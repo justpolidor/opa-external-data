@@ -8,5 +8,5 @@ spec:
     namespaces:
       - default
     kinds:
-      - apiGroups: ["apps",""]
-        kinds: ["Deployment","Pod","StatefulSet","DaemonSet"]
+      - apiGroups: [""]
+        kinds: ["Pod"]

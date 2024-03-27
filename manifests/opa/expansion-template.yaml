@@ -1,0 +1,21 @@
+apiVersion: expansion.gatekeeper.sh/v1alpha1
+kind: ExpansionTemplate
+metadata:
+  name: expand-to-pod
+spec:
+  applyTo:
+    - groups: ["apps"]
+      kinds: ["DaemonSet", "Deployment", "ReplicaSet", "StatefulSet"]
+      versions: ["v1"]
+    - groups: [""]
+      kinds: ["ReplicationController"]
+      versions: ["v1"]
+    - groups: ["batch"]
+      kinds: ["Job"]
+      versions: ["v1"]
+  templateSource: "spec.template"
+  enforcementAction: "deny" # This will overwrite all constraint enforcement actions for the GVKs below that result from the GVKs above.
+  generatedGVK:
+    kind: "Pod"
+    group: ""
+    version: "v1"

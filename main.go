@@ -74,16 +74,19 @@ func validateHandler(w http.ResponseWriter, req *http.Request) {
 
 	var providerRequest externaldata.ProviderRequest
 	if err := json.NewDecoder(req.Body).Decode(&providerRequest); err != nil {
-		http.Error(w, fmt.Sprintf("Unable to unmarshal request body: %v", err), http.StatusBadRequest)
+		log.Printf("Error while decoding the providerRequest: %v", err)
+		sendResponse(nil, err.Error(), w)
 		return
 	}
 
 	results, err := processAttestations(req.Context(), providerRequest.Request.Keys)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Error processing attestations: %v", err), http.StatusInternalServerError)
+		log.Printf("Error while procesing the attesation: %v", err)
+		sendResponse(nil, err.Error(), w)
 		return
 	}
 
+	log.Printf("Sending response: %v", results)
 	sendResponse(results, "", w)
 }
 

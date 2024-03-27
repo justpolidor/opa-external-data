@@ -2,12 +2,25 @@ apiVersion: v1
 kind: Pod
 metadata:
   name: java-app-pod
+  namespace: default
 spec:
   containers:
-  - name: java-app-pod
+  - name: chaos-monkey
     image: docker.io/jpolidor/chaos-monkey:0.0.1-SNAPSHOT
     ports:
     - containerPort: 80
+    securityContext:
+      allowPrivilegeEscalation: false
+      runAsNonRoot: true
+      capabilities:
+        drop:
+        - ALL
+      seccompProfile:
+        type: RuntimeDefault
+  - name: goat
+    image: docker.io/jpolidor/goat-jdk
+    ports:
+    - containerPort: 8080
     securityContext:
       allowPrivilegeEscalation: false
       runAsNonRoot: true
