@@ -1,0 +1,5 @@
+certs/
+.vscode/
+examples/
+manifests/
+mainbkp.go

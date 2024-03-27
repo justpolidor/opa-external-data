@@ -1,0 +1,8 @@
+apiVersion: v1
+data:
+  cosign.pub: LS0tLS1CRUdJTiBQVUJMSUMgS0VZLS0tLS0KTUZrd0V3WUhLb1pJemowQ0FRWUlLb1pJemowREFRY0RRZ0FFWTdJS0cycU9TZ1EzK1VMYzV2VHNDdjhUZkJPdwp4YXpTNnVKczRpcmFsTmpxRHZlNFVqRjR5dVRyQU0yVXh3emN5Z1VKeWJEeWo2NXVxT2lkRjNidVBRPT0KLS0tLS1FTkQgUFVCTElDIEtFWS0tLS0tCg==
+kind: Secret
+metadata:
+  creationTimestamp: null
+  name: cosign-pub
+  namespace: gatekeeper-system

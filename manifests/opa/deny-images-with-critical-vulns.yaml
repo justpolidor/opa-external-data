@@ -1,0 +1,12 @@
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sExternalDataValidation
+metadata:
+  name: deny-images-with-critical-vulns
+spec:
+  enforcementAction: deny
+  match:
+    namespaces:
+      - default
+    kinds:
+      - apiGroups: ["apps",""]
+        kinds: ["Deployment","Pod","StatefulSet","DaemonSet"]

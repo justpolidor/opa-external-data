@@ -1,0 +1,11 @@
+{
+  "kind": "ProviderRequest",
+  "apiVersion": "externaldata.gatekeeper.sh/v1beta1",
+  "request": {
+    "uid": "12345",
+    "keys": [
+      "docker.io/jpolidor/chaos-monkey:0.0.1-SNAPSHOT"
+    ]
+  }
+}
+  
