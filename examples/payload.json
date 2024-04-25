@@ -4,7 +4,7 @@
   "request": {
     "uid": "12345",
     "keys": [
-      "docker.io/jpolidor/chaos-monkey:0.0.1-SNAPSHOT"
+      "docker.io/jpolidor/goat-jdk:latest"
     ]
   }
 }

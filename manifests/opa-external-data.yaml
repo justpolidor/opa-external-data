@@ -17,7 +17,7 @@ spec:
       securityContext:
         runAsUser: 65532
       containers:
-      - image: kind-registry:5000/opa-external-data
+      - image: docker.io/jpolidor/opa-external-data:latest
         imagePullPolicy: Always
         name: opa-external-data
         securityContext:

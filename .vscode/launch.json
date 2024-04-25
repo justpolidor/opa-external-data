@@ -10,7 +10,7 @@
             "request": "launch",
             "mode": "auto",
             "program": "${workspaceFolder}/main.go",
-            "env": {"TLS_KEY_FILE":"certs/server.key", "TLS_CERT_FILE":"certs/server.crt", "COSIGN_PUBLIC_KEY_PATH":"/Users/justinpolidori/.cosign/cosign.pub"},
+            "env": {"IS_LOCAL":"yes","TLS_KEY_FILE":"certs/server.key", "TLS_CERT_FILE":"certs/server.crt", "COSIGN_PUBLIC_KEY_PATH":"/Users/justinpolidori/.cosign/cosign.pub"},
 
             "dlvLoadConfig": {
                 "followPointers": true,

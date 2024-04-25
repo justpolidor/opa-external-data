@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"crypto"
-	"crypto/ecdsa"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
@@ -18,11 +17,8 @@ import (
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/justpolidor/opa-external-data/data"
 	"github.com/open-policy-agent/frameworks/constraint/pkg/externaldata"
-	ssldsse "github.com/secure-systems-lab/go-securesystemslib/dsse"
-	"github.com/sigstore/cosign/pkg/cosign"
-	"github.com/sigstore/cosign/pkg/types"
+	"github.com/sigstore/cosign/v2/pkg/cosign"
 	"github.com/sigstore/sigstore/pkg/signature"
-	"github.com/sigstore/sigstore/pkg/signature/dsse"
 )
 
 const (
@@ -31,38 +27,51 @@ const (
 )
 
 func main() {
-	certFile := "/etc/tls/tls.crt"
-	keyFile := "/etc/tls/tls.key"
+	if os.Getenv("IS_LOCAL") == "yes" {
+		server := &http.Server{
+			Addr: ":8443",
+		}
 
-	caCert, err := os.ReadFile("/tmp/gatekeeper/ca.crt")
-	if err != nil {
-		panic(err)
-	}
+		http.HandleFunc("/validate", validateHandler)
 
-	clientCAs := x509.NewCertPool()
-	clientCAs.AppendCertsFromPEM(caCert)
+		log.Printf("Starting HTTPS server on %s...", server.Addr)
+		if err := server.ListenAndServe(); err != nil {
+			log.Fatalf("Failed to listen and serve: %v", err)
+		}
+	} else {
+		certFile := "/etc/tls/tls.crt"
+		keyFile := "/etc/tls/tls.key"
 
-	if !clientCAs.AppendCertsFromPEM(caCert) {
-		log.Fatalf("Failed to append Gatekeeper's CA certificate")
-	}
+		caCert, err := os.ReadFile("/tmp/gatekeeper/ca.crt")
+		if err != nil {
+			panic(err)
+		}
 
-	// Configure TLS settings
-	tlsConfig := &tls.Config{
-		ClientAuth: tls.RequireAndVerifyClientCert,
-		ClientCAs:  clientCAs,
-		MinVersion: tls.VersionTLS13,
-	}
+		clientCAs := x509.NewCertPool()
+		clientCAs.AppendCertsFromPEM(caCert)
 
-	server := &http.Server{
-		Addr:      ":9443",
-		TLSConfig: tlsConfig,
-	}
+		if !clientCAs.AppendCertsFromPEM(caCert) {
+			log.Fatalf("Failed to append Gatekeeper's CA certificate")
+		}
 
-	http.HandleFunc("/validate", validateHandler)
+		// Configure TLS settings
+		tlsConfig := &tls.Config{
+			ClientAuth: tls.RequireAndVerifyClientCert,
+			ClientCAs:  clientCAs,
+			MinVersion: tls.VersionTLS13,
+		}
 
-	log.Printf("Starting HTTPS server on %s...", server.Addr)
-	if err := server.ListenAndServeTLS(certFile, keyFile); err != nil {
-		log.Fatalf("Failed to listen and serve: %v", err)
+		server := &http.Server{
+			Addr:      ":9443",
+			TLSConfig: tlsConfig,
+		}
+
+		http.HandleFunc("/validate", validateHandler)
+
+		log.Printf("Starting HTTPS server on %s...", server.Addr)
+		if err := server.ListenAndServeTLS(certFile, keyFile); err != nil {
+			log.Fatalf("Failed to listen and serve: %v", err)
+		}
 	}
 }
 
@@ -103,16 +112,25 @@ func processAttestations(ctx context.Context, keys []string) ([]externaldata.Ite
 			return appendError(results, key, fmt.Sprintf("Error parsing reference: %v", err))
 		}
 
-		attestations, err := cosign.FetchAttestationsForReference(ctx, ref)
+		verifiedAttestations, _, err := cosign.VerifyImageAttestations(ctx, ref, &cosign.CheckOpts{
+			SigVerifier:   verifier,
+			ClaimVerifier: cosign.IntotoSubjectClaimVerifier,
+			IgnoreTlog:    true,
+		})
+
+		log.Printf("Verified attestations %#v ", verifiedAttestations)
+
+		if err != nil {
+			return appendError(results, key, fmt.Sprintf("Failed to verify attestation: %v", err))
+		}
+
+		attestations, err := cosign.FetchAttestationsForReference(ctx, ref, "https://cosign.sigstore.dev/attestation/vuln/v1")
 		if err != nil {
 			return appendError(results, key, fmt.Sprintf("Failed to fetch attestations: %v", err))
 		}
 
 		for _, attestation := range attestations {
-			if err := verifyDSSEEnvelope(ctx, verifier, attestation); err != nil {
-				return appendError(results, key, fmt.Sprintf("Failed to verify DSSE: %v", err))
-			}
-			// After DSSE verification, check for critical vulnerabilities
+			// After cosign attestation verification, check for critical vulnerabilities
 			if hasCritical, critVulns := checkCriticalVulnerabilities(attestation); hasCritical {
 				results = append(results, externaldata.Item{Key: key, Error: fmt.Sprintf("Found critical vulnerabilities: %v", critVulns)})
 			} else {
@@ -149,65 +167,35 @@ func checkCriticalVulnerabilities(attestation cosign.AttestationPayload) (bool, 
 }
 
 func loadPublicKeyVerifier() (signature.Verifier, error) {
-	pubKeyBytes, err := os.ReadFile("/etc/cosign/cosign.pub")
+	var pubKeyBytes []byte
+	var err error
+	if os.Getenv("IS_LOCAL") == "yes" {
+		pubKeyBytes, err = os.ReadFile("/Users/justinpolidori/.cosign/cosign.pub")
+	} else {
+		pubKeyBytes, err = os.ReadFile("/etc/cosign/cosign.pub")
+	}
 	if err != nil {
 		return nil, fmt.Errorf("error reading public key file: %v", err)
 	}
-
+	// Decode the PEM block
 	block, _ := pem.Decode(pubKeyBytes)
 	if block == nil || block.Type != "PUBLIC KEY" {
-		return nil, fmt.Errorf("failed to decode PEM block containing public key")
+		return nil, fmt.Errorf("failed to decode PEM block containing public key or incorrect type")
 	}
 
+	// Convert PEM block to *x509.Certificate
 	pubKey, err := x509.ParsePKIXPublicKey(block.Bytes)
 	if err != nil {
-		return nil, fmt.Errorf("error parsing public key: %v", err)
+		return nil, fmt.Errorf("error parsing PKIX public key: %v", err)
 	}
 
-	ecdsaPubKey, ok := pubKey.(*ecdsa.PublicKey)
-	if !ok {
-		return nil, fmt.Errorf("public key is not of type ECDSA")
-	}
-
-	return signature.LoadECDSAVerifier(ecdsaPubKey, crypto.SHA256)
-}
-
-func convertCosignSignatures(cosignSigs []cosign.Signatures) []ssldsse.Signature {
-	var ssldsseSigs []ssldsse.Signature
-	for _, cosignSig := range cosignSigs {
-		ssldsseSig := ssldsse.Signature{
-			KeyID: cosignSig.KeyID,
-			Sig:   cosignSig.Sig,
-		}
-		ssldsseSigs = append(ssldsseSigs, ssldsseSig)
-	}
-	return ssldsseSigs
-}
-
-func verifyDSSEEnvelope(ctx context.Context, verifier signature.Verifier, attestation cosign.AttestationPayload) error {
-	dsseEnvelope := ssldsse.Envelope{
-		PayloadType: types.IntotoPayloadType,
-		Payload:     attestation.PayLoad,
-		Signatures:  convertCosignSignatures(attestation.Signatures),
-	}
-
-	envelopeBytes, err := json.Marshal(dsseEnvelope)
+	// Create a Verifier using the public key
+	verifier, err := signature.LoadVerifier(pubKey, crypto.SHA256)
 	if err != nil {
-		return fmt.Errorf("failed to marshal DSSE envelope: %v", err)
+		return nil, fmt.Errorf("failed to load verifier: %v", err)
 	}
 
-	env := ssldsse.Envelope{}
-	if err := json.Unmarshal(envelopeBytes, &env); err != nil {
-		return fmt.Errorf("failed to unmarshal DSSE envelope: %v", err)
-	}
-
-	dssev, err := ssldsse.NewEnvelopeVerifier(&dsse.VerifierAdapter{SignatureVerifier: verifier})
-	if err != nil {
-		return fmt.Errorf("failed to create DSSE envelope verifier: %v", err)
-	}
-
-	_, err = dssev.Verify(ctx, &env)
-	return err // This will return nil if verification is successful or an error if it fails
+	return verifier, nil
 }
 
 func appendError(results []externaldata.Item, key, errorMsg string) ([]externaldata.Item, error) {
@@ -216,15 +204,6 @@ func appendError(results []externaldata.Item, key, errorMsg string) ([]externald
 		Error: errorMsg,
 	})
 	return results, fmt.Errorf(errorMsg)
-}
-
-func appendValid(results []externaldata.Item, key string, attestation cosign.AttestationPayload) []externaldata.Item {
-	// Here you can further process the attestation payload if needed
-	results = append(results, externaldata.Item{
-		Key:   key,
-		Value: key + "_valid", // or any other appropriate value
-	})
-	return results
 }
 
 func sendResponse(results []externaldata.Item, systemErr string, w http.ResponseWriter) {
@@ -243,12 +222,4 @@ func sendResponse(results []externaldata.Item, systemErr string, w http.Response
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		log.Printf("Failed to encode response: %v", err)
 	}
-}
-
-func getEnv(key string) string {
-	value := os.Getenv(key)
-	if value == "" {
-		log.Fatalf("Environment variable %s not set", key)
-	}
-	return value
 }
