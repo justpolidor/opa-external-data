@@ -12,7 +12,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"time"
 
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/justpolidor/opa-external-data/data"
@@ -22,8 +21,9 @@ import (
 )
 
 const (
-	timeout    = 3 * time.Second
-	apiVersion = "externaldata.gatekeeper.sh/v1beta1"
+	apiVersion        = "externaldata.gatekeeper.sh/v1beta1"
+	kind              = "ProviderResponse"
+	vulnPredicateType = "https://cosign.sigstore.dev/attestation/vuln/v1"
 )
 
 func main() {
@@ -124,7 +124,7 @@ func processAttestations(ctx context.Context, keys []string) ([]externaldata.Ite
 			return appendError(results, key, fmt.Sprintf("Failed to verify attestation: %v", err))
 		}
 
-		attestations, err := cosign.FetchAttestationsForReference(ctx, ref, "https://cosign.sigstore.dev/attestation/vuln/v1")
+		attestations, err := cosign.FetchAttestationsForReference(ctx, ref, vulnPredicateType)
 		if err != nil {
 			return appendError(results, key, fmt.Sprintf("Failed to fetch attestations: %v", err))
 		}
@@ -209,7 +209,7 @@ func appendError(results []externaldata.Item, key, errorMsg string) ([]externald
 func sendResponse(results []externaldata.Item, systemErr string, w http.ResponseWriter) {
 	response := externaldata.ProviderResponse{
 		APIVersion: apiVersion,
-		Kind:       "ProviderResponse",
+		Kind:       kind,
 	}
 
 	if len(results) > 0 {

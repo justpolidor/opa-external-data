@@ -4,7 +4,8 @@
   "request": {
     "uid": "12345",
     "keys": [
-      "docker.io/jpolidor/goat-jdk:latest"
+      "docker.io/jpolidor/goat-jdk:latest",
+      "alpine:3.10"
     ]
   }
 }
